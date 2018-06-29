@@ -19,13 +19,17 @@ var configfile = flag.String("config", "rkn.conf", "path to configuration file")
 func main() {
 	fmt.Println("RKN monitor, version: 1.0.0-20180628")
 
+	flag.Parse()
+
 	conf, err := NewConfig(*configfile)
 	if err != nil {
 		log.Fatal("failed parse configuration file", *configfile, err)
 	}
 
 	if conf.Debug {
-		log.SetFlags(log.Lshortfile)
+		log.SetFlags(log.Ltime | log.Lshortfile)
+	} else {
+		log.SetFlags(log.Ltime)
 	}
 
 	rep, err := NewRepository(conf.GitRepo)
