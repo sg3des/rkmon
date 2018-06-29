@@ -7,10 +7,9 @@ import (
 )
 
 type Subscriber struct {
-	Email   string   `schema:"email,required"`
-	IP      []net.IP `schema:"ip,required"`
-	blocked []net.IP
-	sentAt  time.Time
+	Email  string   `schema:"email,required"`
+	IP     []net.IP `schema:"ip,required"`
+	sentAt time.Time
 }
 
 func (subs *Subscriber) Key() []byte {
@@ -31,6 +30,9 @@ func (api *API) CheckSubscribers() {
 			continue
 		}
 
+		if api.debug {
+			log.Printf("send alert mail to %s, with IP-addresses: %v", subs.Email, blockedIP)
+		}
 		err := api.smtp.SendAlertTemplate(subs.Email, blockedIP)
 		if err != nil {
 			log.Printf("failed send mail to %s, by reason: %s", subs.Email, err)
