@@ -30,6 +30,11 @@ func (api *API) CheckSubscribers() {
 			continue
 		}
 
+		if api.smtp.Host == "" || !*emails {
+			log.Printf("subscriber %s have some blocked IP-addresses: %v", subs.Email, blockedIP)
+			continue
+		}
+
 		if api.debug {
 			log.Printf("send alert mail to %s, with IP-addresses: %v", subs.Email, blockedIP)
 		}
