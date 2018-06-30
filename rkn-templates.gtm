@@ -1,3 +1,31 @@
-|| Index(w io.Writer)
+|| package main
+|| template head(w io.Writer)
+<!DOCTYPE html>
+<html>
+<head>
+	<title>RKN monitor</title>
+	<script src='/assets/index.js'></script>
+	<link rel="stylesheet" type="text/css" href="/assets/index.css">
+</head>
+<body>
+|| end
+
+|| template (api *API) Template(w io.Writer)
+|| head(w)
+
+<main>
+	<div>
+		<p>Blocked {{=api.reg.TotalIP()}} IP addresses</p>
+		<p>Last update at {{=api.CommitTime}}</p>
+	</div>
+
+
+	<div id='status'></div>
+
+	<form onsubmit="checkIP(this.ip.value, '#status'); return false;">
+		<input type='text' name='ip' required>
+		<input type='submit' value='submit'>
+	</form>
+</main>
 
 || end

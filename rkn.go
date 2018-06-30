@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,9 +16,10 @@ import (
 )
 
 var configfile = flag.String("config", "rkn.conf", "path to configuration file")
+var emails = flag.Bool("emails", true, "enable/disable sending alert emails")
 
 func main() {
-	fmt.Println("RKN monitor, version: 1.0.0-20180628")
+	fmt.Println("RKN monitor, version: 1.0.1-20180630")
 
 	flag.Parse()
 
@@ -64,7 +66,7 @@ type API struct {
 	smtp SMTP
 
 	repofile   string
-	commitTime time.Time
+	CommitTime time.Time
 
 	subscribers *bytetree.Tree
 
@@ -93,10 +95,10 @@ func (api *API) Update() error {
 		return err
 	}
 
-	if commitTime.Equal(api.commitTime) {
+	if commitTime.Equal(api.CommitTime) {
 		return nil
 	}
-	if commitTime.Before(api.commitTime) {
+	if commitTime.Before(api.CommitTime) {
 		return errors.New("local commit newer than remote commit, it discourages")
 	}
 
@@ -116,7 +118,7 @@ func (api *API) Update() error {
 		log.Println("storage updated, it took", time.Now().Sub(start))
 	}
 
-	api.commitTime = commitTime
+	api.CommitTime = commitTime
 
 	api.CheckSubscribers()
 
@@ -131,23 +133,27 @@ func (api *API) WebServer(addr string) error {
 	http.HandleFunc("/", api.Index)
 	http.HandleFunc("/subscribe/", api.Subscribe)
 	http.HandleFunc("/unsubscribe/", api.Unsubscribe)
+	http.HandleFunc("/assets/", api.Assets)
+
+	fmt.Println("start web-server on", addr)
 
 	return http.ListenAndServe(addr, nil)
 }
 
 //Index urlpath /?ip=127.0.0.1
 func (api *API) Index(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	sip, ok := q["ip"]
-	if !ok || len(sip) == 0 {
-		err := "invalid request, required variable 'ip' not found"
-		http.Error(w, err, http.StatusBadRequest)
+	if ip := r.URL.Query().Get("ip"); len(ip) != 0 {
+		api.ipQuery(ip, w, r)
 		return
 	}
 
-	ip := net.ParseIP(sip[0])
+	api.Template(w)
+}
+
+func (api *API) ipQuery(sip string, w http.ResponseWriter, r *http.Request) {
+	ip := net.ParseIP(sip)
 	if ip.IsUnspecified() {
-		err := "invalid request, failed parse ip " + sip[0]
+		err := "invalid request, failed parse ip " + sip
 		http.Error(w, err, http.StatusBadRequest)
 		return
 	}
@@ -195,4 +201,33 @@ func (api *API) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 
 	api.RemoveSubscriber(email)
 	fmt.Fprintf(w, "successfull unsubscribe %s", email)
+}
+
+//Assets serve static files stored to go code how bind-data
+func (api *API) Assets(w http.ResponseWriter, r *http.Request) {
+	assetname := r.URL.Path[1:]
+
+	//lookup assets file
+	fi, err := AssetInfo(assetname)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("File %s not found", r.URL.Path), 404)
+		return
+	}
+
+	//check modified date
+	modSince, err := time.Parse(time.RFC1123, r.Header.Get("If-Modified-Since"))
+	if err == nil && fi.ModTime().Before(modSince) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	//restore assets from bind data
+	data, err := Asset(assetname)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("File %s not found", r.URL.Path), http.StatusNotFound)
+		return
+	}
+
+	//server file
+	http.ServeContent(w, r, r.URL.Path, time.Now(), bytes.NewReader(data))
 }
